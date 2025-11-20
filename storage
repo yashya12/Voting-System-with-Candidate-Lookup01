@@ -1,0 +1,112 @@
+"""Data storage functions for candidates and votes."""
+
+import json
+import os
+from typing import Dict, List, Optional, Tuple
+
+DATA_FILE = "data/storage.json"
+
+
+def load_data() -> Dict:
+	"""Load data from JSON file, create if doesn't exist."""
+	os.makedirs("data", exist_ok=True)
+	if not os.path.exists(DATA_FILE):
+		return {"candidates": {}, "votes": {}}
+	try:
+		with open(DATA_FILE, "r", encoding="utf-8") as f:
+			data = json.load(f)
+		return {"candidates": data.get("candidates", {}), "votes": data.get("votes", {})}
+	except:
+		return {"candidates": {}, "votes": {}}
+
+
+def save_data(data: Dict) -> None:
+	"""Save data to JSON file."""
+	with open(DATA_FILE, "w", encoding="utf-8") as f:
+		json.dump(data, f, indent=2)
+
+
+def add_candidate(cid: str, name: str, party: str) -> None:
+	"""Add a new candidate."""
+	data = load_data()
+	if cid in data["candidates"]:
+		raise ValueError("Candidate already exists.")
+	data["candidates"][cid] = {"name": name, "party": party}
+	save_data(data)
+
+
+def get_candidate(cid: str) -> Optional[Dict]:
+	"""Get candidate by ID."""
+	data = load_data()
+	return data["candidates"].get(cid)
+
+
+def list_candidates() -> List[Tuple[str, str, str]]:
+	"""Get all candidates as (id, name, party)."""
+	data = load_data()
+	return [(cid, info["name"], info["party"]) for cid, info in data["candidates"].items()]
+
+
+def update_candidate(cid: str, name: Optional[str] = None, party: Optional[str] = None) -> None:
+	"""Update candidate name or party."""
+	data = load_data()
+	if cid not in data["candidates"]:
+		raise ValueError("Candidate not found.")
+	if name:
+		data["candidates"][cid]["name"] = name
+	if party:
+		data["candidates"][cid]["party"] = party
+	save_data(data)
+
+
+def delete_candidate(cid: str) -> bool:
+	"""Delete candidate and their votes."""
+	data = load_data()
+	if cid not in data["candidates"]:
+		return False
+	del data["candidates"][cid]
+	data["votes"].pop(cid, None)
+	save_data(data)
+	return True
+
+
+def search_candidates(query: str = "", party: str = "") -> List[Tuple[str, str, str]]:
+	"""Search candidates by name/ID and optionally filter by party."""
+	all_candidates = list_candidates()
+	if not query and not party:
+		return all_candidates
+	
+	results = []
+	query_lower = query.lower()
+	party_lower = party.lower()
+	
+	for cid, name, p in all_candidates:
+		# Check search query
+		if query and query_lower not in cid.lower() and query_lower not in name.lower():
+			continue
+		# Check party filter
+		if party and party_lower not in p.lower():
+			continue
+		results.append((cid, name, p))
+	return results
+
+
+def record_vote(cid: str) -> None:
+	"""Record a vote for a candidate."""
+	data = load_data()
+	if cid not in data["candidates"]:
+		raise ValueError("Candidate not found.")
+	data["votes"][cid] = data["votes"].get(cid, 0) + 1
+	save_data(data)
+
+
+def get_results() -> List[Tuple[str, int, str, str]]:
+	"""Get voting results sorted by votes."""
+	data = load_data()
+	results = []
+	for cid, info in data["candidates"].items():
+		votes = data["votes"].get(cid, 0)
+		results.append((cid, votes, info["name"], info["party"]))
+	results.sort(key=lambda x: x[1], reverse=True)
+	return results
+
