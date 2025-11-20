@@ -1,0 +1,203 @@
+"""Main application - voting system with face recognition."""
+
+import os
+import shutil
+
+from face_recognition import FACES_DIR, capture_faces, recognize_face, train_model
+from storage import (
+	add_candidate,
+	delete_candidate,
+	get_candidate,
+	get_results,
+	list_candidates,
+	record_vote,
+	search_candidates,
+	update_candidate,
+)
+
+
+def prompt(msg: str) -> str:
+	"""Get user input."""
+	return input(msg).strip()
+
+
+def add_candidate_menu():
+	"""Menu: Add candidate."""
+	cid = prompt("Candidate ID: ")
+	if not cid.isdigit():
+		print("ID must be a number.")
+		return
+	name = prompt("Name: ")
+	party = prompt("Party: ")
+	try:
+		add_candidate(cid, name, party)
+		print("Candidate added.")
+	except ValueError as e:
+		print(f"Error: {e}")
+
+
+def list_candidates_menu():
+	"""Menu: List all candidates."""
+	candidates = list_candidates()
+	if not candidates:
+		print("No candidates yet.")
+		return
+	print("\nCandidates:")
+	for cid, name, party in candidates:
+		print(f"  {cid}: {name} ({party})")
+
+
+def update_candidate_menu():
+	"""Menu: Update candidate."""
+	cid = prompt("Candidate ID: ")
+	candidate = get_candidate(cid)
+	if not candidate:
+		print("Candidate not found.")
+		return
+	
+	name = prompt(f"New name ({candidate['name']}): ") or candidate["name"]
+	party = prompt(f"New party ({candidate['party']}): ") or candidate["party"]
+	update_candidate(cid, name=name, party=party)
+	print("Candidate updated.")
+
+
+def capture_faces_menu():
+	"""Menu: Capture faces."""
+	cid = prompt("Candidate ID: ")
+	if not cid.isdigit() or not get_candidate(cid):
+		print("Candidate not found.")
+		return
+	
+	num = prompt("How many photos? (default 15): ")
+	num_samples = int(num) if num.isdigit() else 15
+	
+	try:
+		capture_faces(cid, num_samples)
+		train_model()
+	except Exception as e:
+		print(f"Error: {e}")
+
+
+def recognize_vote_menu():
+	"""Menu: Recognize face and vote."""
+	try:
+		cid = recognize_face()
+	except Exception as e:
+		if "not found" in str(e).lower():
+			print("Training model...")
+			try:
+				train_model()
+				cid = recognize_face()
+			except Exception as e2:
+				print(f"Error: {e2}")
+				return
+		else:
+			print(f"Error: {e}")
+			return
+	
+	if cid is None:
+		print("No face detected.")
+		return
+	
+	cid = str(cid)
+	candidate = get_candidate(cid)
+	if not candidate:
+		print(f"Unknown ID: {cid}")
+		return
+	
+	print(f"Recognized: {candidate['name']} (ID: {cid})")
+	if prompt("Cast vote? (y/n): ").lower().startswith("y"):
+		record_vote(cid)
+		print("Vote recorded.")
+	else:
+		print("Vote cancelled.")
+
+
+def view_results_menu():
+	"""Menu: View voting results."""
+	results = get_results()
+	if not results:
+		print("No votes yet.")
+		return
+	print("\nResults:")
+	for cid, votes, name, party in results:
+		print(f"  {name} ({party}) - {votes} votes")
+
+
+def search_candidates_menu():
+	"""Menu: Search candidates."""
+	query = prompt("Search (name/ID): ")
+	party = prompt("Party filter (optional): ")
+	results = search_candidates(query, party)
+	if not results:
+		print("No matches.")
+		return
+	print("\nResults:")
+	for cid, name, p in results:
+		print(f"  {cid}: {name} ({p})")
+
+
+def delete_candidate_menu():
+	"""Menu: Delete candidate."""
+	cid = prompt("Candidate ID: ")
+	if not get_candidate(cid):
+		print("Candidate not found.")
+		return
+	
+	if not prompt("Delete candidate and photos? (y/n): ").lower().startswith("y"):
+		print("Cancelled.")
+		return
+	
+	if delete_candidate(cid):
+		folder = f"{FACES_DIR}/{cid}"
+		if os.path.isdir(folder):
+			shutil.rmtree(folder, ignore_errors=True)
+		print("Candidate deleted.")
+	else:
+		print("Failed to delete.")
+
+
+def main():
+	"""Main menu loop."""
+	menu = """
+Voting System (Face Recognition)
+1) Add candidate
+2) List candidates
+3) Update candidate
+4) Capture faces
+5) Recognize & vote
+6) View results
+7) Search candidates
+8) Delete candidate
+0) Exit
+"""
+	while True:
+		print(menu)
+		choice = prompt("Choose: ")
+		
+		if choice == "1":
+			add_candidate_menu()
+		elif choice == "2":
+			list_candidates_menu()
+		elif choice == "3":
+			update_candidate_menu()
+		elif choice == "4":
+			capture_faces_menu()
+		elif choice == "5":
+			recognize_vote_menu()
+		elif choice == "6":
+			view_results_menu()
+		elif choice == "7":
+			search_candidates_menu()
+		elif choice == "8":
+			delete_candidate_menu()
+		elif choice == "0":
+			print("Goodbye!")
+			break
+		else:
+			print("Invalid choice.")
+
+
+if __name__ == "__main__":
+	main()
+
